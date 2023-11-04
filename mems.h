@@ -25,7 +25,7 @@ Use this macro where ever you need PAGE_SIZE.
 As PAGESIZE can differ system to system we should have flexibility to modify this
 macro to make the output of all system same and conduct a fair evaluation.
 */
-#define PAGE_SIZE 16438
+#define PAGE_SIZE 4096
 #define PROT (PROT_READ | PROT_WRITE)
 #define FLAGS (MAP_ANONYMOUS | MAP_PRIVATE)
 
@@ -103,8 +103,9 @@ Input Parameter: Nothing
 Returns: Nothing
 */
 size_t starting_VA;
-unsigned long vi[][2];
-unsigned long ph[][2];
+//unsigned long vi[][2];
+//unsigned long ph[][2];
+int nmp =0;
 //Function to split a node into a process and a Hole
 void split(sub_node* m1, size_t x,MainNode* w){
     sub_node* ns1 = (sub_node*)mmap(NULL, sizeof(sub_node), PROT, FLAGS, -1, 0);
@@ -177,6 +178,28 @@ allocated memory using the munmap system call.
 Input Parameter: Nothing
 Returns: Nothing
 */
+void edging(void){
+    MainNode* temp = get_head(Free_maintbu);
+    while(temp!=NULL){
+        sub_node *suby = temp->sn;
+        while(suby!=NULL){
+            if(strcmp(suby->process_type,"HOLE")==0 && suby->next!=NULL && strcmp(suby->next->process_type,"HOLE")==0 ){
+                sub_node *lala = (sub_node*)mmap(NULL, sizeof(sub_node), PROT, FLAGS, -1, 0);
+                lala ->next = suby->next;
+                suby->next = suby->next->next;
+                if(lala->next->next!=NULL){
+                    lala ->next ->next->prev = suby;
+                }
+                lala->next ->next = NULL;
+                lala->next -> prev = NULL;
+                suby->size += lala->next->size;
+                munmap(lala->next,sizeof(sub_node));
+            }
+            suby=suby->next;
+        }
+        temp=temp->next;
+    }
+}
 void mems_finish(void){
     
 }
@@ -195,12 +218,14 @@ Parameter: The size of the memory the user program wants
 Returns: MeMS Virtual address (that is created by MeMS)
 */
 void* mems_malloc(size_t size){
+    edging();
     //I'll recurse every main node of the free list and check for a sufficiently large HOLE in its subchain.
     bool found = false;
-    int nva = 0;
+    unsigned long nva = 0;
     MainNode* temp = get_head(Free_maintbu);
     if(get_head(Free_maintbu)==NULL){
         char *mfheap = mmap(0,PAGE_SIZE,PROT,FLAGS,-1,0);
+        nmp++;
         if(mfheap == MAP_FAILED){
             printf("ERROR");
             return NULL;
@@ -246,7 +271,7 @@ void* mems_malloc(size_t size){
         while(temp!=NULL){
             sub_node* temp_sub = temp->sn;
             while(temp_sub!=NULL){
-                if(temp_sub->size>size && strcmp(temp_sub->process_type,"HOLE")==0 && temp_sub->prev!=NULL){
+                if(temp_sub->size>size && strcmp(temp_sub->process_type,"HOLE")==0 && temp_sub->prev!=NULL && found == false){
                     pic->next = temp_sub->prev;
                     split(temp_sub,size,temp);
                     via = pic->next->next->VA;
@@ -265,9 +290,10 @@ void* mems_malloc(size_t size){
                     newmapping->eva = newmapping->sva + size -1;
                     newmapping->spa = (unsigned long)(void*)pic->next->next;
                     newmapping->epa = (unsigned long)(void*)pic->next->next + size -1;
+                    found = true;
                     break;
                 }
-                else if(temp_sub->size == size && strcmp(temp_sub->process_type, "HOLE")==0){
+                else if(temp_sub->size == size && strcmp(temp_sub->process_type, "HOLE")==0 && found == false){
                     strcpy(temp_sub->process_type,"PROCESS");
                     via = temp_sub->VA;
                     mapping *tempm = get_mhead(mltbu);
@@ -285,17 +311,19 @@ void* mems_malloc(size_t size){
                     newmapping->eva = newmapping->sva + size -1;
                     newmapping->spa = (unsigned long)(void*)temp_sub;
                     newmapping->epa = (unsigned long)(void*)temp_sub + size -1;
+                    found = true;
                     break;
             }else if(temp_sub->size<size && strcmp(temp_sub->process_type, "HOLE")==0 && temp_sub->next!=NULL){
                 continue;
             }else if(temp_sub->next == NULL && (strcmp(temp_sub->process_type, "HOLE")==0 || strcmp(temp_sub->process_type, "PROCESS")==0) && temp_sub->size<size){
-                    nva = temp_sub->VA +temp_sub->size-1;
+                    nva = temp_sub->VA +temp_sub->size - 1;
             }
 
                     temp_sub = temp_sub->next;
         }
         if(temp_sub==NULL && temp->next == NULL && found==false){
                 char *mfheap = mmap(0,PAGE_SIZE,PROT,FLAGS,-1,0);
+                nmp++;
                 if(mfheap == MAP_FAILED){
                     printf("ERROR");
                     return NULL;
@@ -351,7 +379,37 @@ Parameter: Nothing
 Returns: Nothing but should print the necessary information on STDOUT
 */
 void mems_print_stats(void){
-
+    printf("Number of Mapped Pages: %d\n",nmp);
+    unsigned long un_mem = 0;
+    MainNode* temp = get_head(Free_maintbu);
+    while(temp!=NULL){
+        sub_node* calcsub = temp->sn;
+        while(calcsub!=NULL){
+            if(strcmp(calcsub->process_type,"HOLE")==0){
+                un_mem+=calcsub->size;
+            }
+            calcsub=calcsub->next;
+        }
+        temp = temp->next;
+    }
+    temp = get_head(Free_maintbu);
+    printf("Unused Memory: %lu bytes\n", un_mem);
+    printf("\n");
+    int i =1;
+    printf("Sub-Chain Details\n");
+    while(temp!=NULL){
+        int k = 1;
+        sub_node *ss = temp->sn;
+        printf("Main Node ID: %d\n", i);
+        while(ss!=NULL){
+            printf("Sub-Node: %d | PROCESS TYPE: %s | SIZE: %lu bytes\n",k,ss->process_type,ss->size);
+            ss=ss->next;
+            k++;
+        }
+        printf("---------------------------------------------------\n");
+        i++;
+        temp = temp->next;
+    }
 }
 
 
@@ -369,6 +427,7 @@ void *mems_get(void*v_ptr){
             phyaddr = temp->spa + memsva - temp->sva;
             break;
         }
+        temp = temp->next;
     }
     return (void *)phyaddr;
 }
@@ -380,6 +439,45 @@ Parameter: MeMS Virtual address (that is created by MeMS)
 Returns: nothing
 */
 void mems_free(void *v_ptr){
+    unsigned long memsva = (unsigned long)v_ptr;
+    unsigned long phyaddr = 0 ;
+    mapping *temp = get_mhead(mltbu);
+    while(temp!=NULL){
+        if(temp->sva<=memsva && temp->eva>=memsva){
+            phyaddr = temp->spa + memsva - temp->sva;
+            if(temp->prev!=NULL && temp->next!=NULL){
+                temp ->prev ->next = temp->next;
+                temp->next->prev = temp->prev;
+                temp->next = NULL;
+                temp->prev = NULL;
+                munmap(temp, sizeof(mapping));
+            }else if(temp->prev == NULL && temp->next !=NULL){
+                set_mhead(mltbu, temp->next);
+                temp->next = NULL;
+                temp ->next ->prev = NULL;
+                munmap(temp, sizeof(mapping));
+            }else if(temp->next == NULL && temp->prev!=NULL){
+                temp->prev ->next = NULL;
+                temp ->prev = NULL;
+                munmap(temp, sizeof(mapping));
+            }
+            break;
+        }
+        temp = temp->next;
+    }
+    MainNode *tem = get_head(Free_maintbu);
+    while(tem!=NULL){
+        sub_node *tms = tem->sn;
+        while(tms!=NULL){
+            if(tms->VA<=memsva && tms->VA + tms->size -1 >=memsva){
+                strcpy(tms->process_type, "HOLE");
+                break;
+            }
+            tms=tms->next;
+        }
+        tem=tem->next;
+    }
+    edging();
     
 }
 
