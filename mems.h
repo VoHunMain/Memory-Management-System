@@ -39,6 +39,11 @@ typedef struct sub_node{
     char process_type[10];
 }sub_node;
  
+typedef struct mcl{
+    int length;
+    struct mcl* next;
+    struct mcl* prev;
+}mcl;
 typedef struct MainNode{
     int ID;
     int num_of_sub_pages;
@@ -188,6 +193,7 @@ void edging(void){
                 lala ->next = suby->next;
                 suby->next = suby->next->next;
                 if(lala->next->next!=NULL){
+                   
                     lala ->next ->next->prev = suby;
                 }
                 lala->next ->next = NULL;
@@ -201,7 +207,20 @@ void edging(void){
     }
 }
 void mems_finish(void){
-    
+    MainNode *curr = get_head(Free_maintbu);
+    while(curr!=NULL){
+        MainNode *tmk = curr->next;
+        sub_node *s1= curr->sn;
+        while(s1!=NULL){
+            sub_node *ne= s1->next ;
+            munmap(s1,sizeof(sub_node));
+            s1 = ne;
+        }
+        munmap(curr, sizeof(MainNode));
+        curr = tmk;
+    }
+    printf("\n");
+    printf("------ Unmapping all memory [mems_finish] ------\n");
 }
 
 
@@ -379,37 +398,79 @@ Parameter: Nothing
 Returns: Nothing but should print the necessary information on STDOUT
 */
 void mems_print_stats(void){
-    printf("Number of Mapped Pages: %d\n",nmp);
+    mcl *mlhead = (mcl*)mmap(NULL,sizeof(mcl),PROT,FLAGS,-1,0);
+    mlhead->length = 0;
+    int count = 0;
     unsigned long un_mem = 0;
     MainNode* temp = get_head(Free_maintbu);
     while(temp!=NULL){
-        sub_node* calcsub = temp->sn;
+        sub_node *calcsub = temp->sn;
         while(calcsub!=NULL){
             if(strcmp(calcsub->process_type,"HOLE")==0){
                 un_mem+=calcsub->size;
             }
+            count++;
             calcsub=calcsub->next;
         }
+        if(mlhead->length==0){
+            mlhead->length=count;
+        }else{
+            mcl *temml = mlhead;
+            while(temml!=NULL){
+                if(temml->next==NULL){
+                    mcl *newt = (mcl*)mmap(NULL,sizeof(mcl),PROT,FLAGS,-1,0);
+                    temml -> next = newt;
+                    newt->length = count;
+                    break;
+                }
+                temml = temml->next;
+            }
+        }
+        count=0;
         temp = temp->next;
     }
     temp = get_head(Free_maintbu);
-    printf("Unused Memory: %lu bytes\n", un_mem);
     printf("\n");
     int i =1;
-    printf("Sub-Chain Details\n");
+    unsigned long svaa = starting_VA;
+    printf("------- MeMS SYSTEM STATS --------\n");
     while(temp!=NULL){
         int k = 1;
         sub_node *ss = temp->sn;
-        printf("Main Node ID: %d\n", i);
+        printf("MAIN[%lu:%lu] -> ", svaa,svaa + PAGE_SIZE-1);
+        svaa +=PAGE_SIZE;
         while(ss!=NULL){
-            printf("Sub-Node: %d | PROCESS TYPE: %s | SIZE: %lu bytes\n",k,ss->process_type,ss->size);
+            char hkn[2];
+            if(strcmp(ss->process_type,"HOLE")==0){
+                strcpy(hkn,"H");
+            }else{
+                strcpy(hkn,"P");
+            }
+            printf("%s[%lu:%lu] <-> ", hkn,ss->VA,ss->VA+ss->size-1);
             ss=ss->next;
             k++;
         }
-        printf("---------------------------------------------------\n");
+        printf("%s"," NULL");
+        printf("\n");
         i++;
         temp = temp->next;
     }
+    printf("Pages used: %d\n",nmp);
+    printf("Space unused: %lu bytes\n", un_mem);
+    printf("Main chain length: %d\n",nmp);
+    printf("Sub-chain length array: ");
+    mcl *prit = mlhead;
+    printf("[");
+    while(prit!=NULL){
+        if(prit->next!=NULL){
+            printf("%d, ",prit->length);
+        }else{
+            printf("%d",prit->length);
+        }
+        prit = prit->next;
+    }
+    printf("]");
+    printf("\n");
 }
 
 
@@ -478,6 +539,5 @@ void mems_free(void *v_ptr){
         tem=tem->next;
     }
     edging();
-    
 }
 
