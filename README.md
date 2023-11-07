@@ -6,17 +6,9 @@ MeMS is a custom memory management system implemented in C. It provides dynamic 
 ## Table of Contents
 
 - [Introduction](#introduction)
-ghhgg
 - [Features](#features)
 - [Getting Started](#getting-started)
-  - [Initialization](#initialization)
-  - [Memory Allocation](#memory-allocation)
-  - [Memory Deallocation](#memory-deallocation)
-  - [Statistics](#statistics)
-- [Functions](#functions)
-- [Examples](#examples)
-- [License](#license)
-
+- [Initialization](#initialization)
 ## Introduction
 
 MeMS is a custom memory management system designed to provide memory allocation and deallocation capabilities to user programs. It manages memory in a hierarchical structure, consisting of main nodes and sub-nodes. The system is designed to reuse memory segments efficiently and minimize the use of `mmap` system calls, which can be costly.
@@ -28,6 +20,7 @@ MeMS is a custom memory management system designed to provide memory allocation 
 - Detailed statistics about memory usage.
 - Mapping of virtual addresses to physical addresses.
 - Custom memory management structure.
+  I have added a function which handles the edge cases of combininig consecutive holes into a single hole node.
 
 ## Getting Started
 
